@@ -1,0 +1,270 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Lacak IP — Siap Pakai</title>
+
+  <!-- Leaflet CSS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+    integrity="sha256-sA+e2k0zv5g1k+gI2m5YzVgk1tXwqkY1bq6l9QmQw4M=" crossorigin=""/>
+
+  <style>
+    :root{
+      --bg:#0f1724;
+      --card:#0b1220;
+      --muted:#9aa4b2;
+      --accent:#06b6d4;
+      --glass: rgba(255,255,255,0.03);
+    }
+    *{box-sizing:border-box}
+    html,body{height:100%;margin:0;font-family:Inter,ui-sans-serif,system-ui,Segoe UI,Roboto,Helvetica,Arial; background: linear-gradient(180deg,#07111a 0%, #071826 100%); color:#e6eef6}
+    .wrap{max-width:1100px;margin:28px auto;padding:20px}
+    header{display:flex;gap:16px;align-items:center;justify-content:space-between;margin-bottom:18px}
+    header h1{font-size:1.25rem;margin:0}
+    .sub{color:var(--muted);font-size:0.9rem}
+    .grid{display:grid;grid-template-columns:1fr 420px;gap:16px}
+    @media (max-width:960px){ .grid{grid-template-columns:1fr} }
+
+    /* Card */
+    .card{background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01)); border:1px solid rgba(255,255,255,0.03); padding:14px; border-radius:12px; box-shadow: 0 6px 24px rgba(2,6,23,0.6)}
+    .controls{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px}
+    input[type=text]{flex:1;padding:10px 12px;border-radius:8px;border:1px solid rgba(255,255,255,0.06);background:transparent;color:inherit;min-width:0}
+    button{background:var(--accent);border:0;padding:10px 12px;border-radius:8px;color:#021018;cursor:pointer;font-weight:600}
+    button.ghost{background:transparent;border:1px solid rgba(255,255,255,0.06);color:var(--muted);font-weight:600}
+    .muted{color:var(--muted);font-size:0.9rem}
+
+    #map{height:560px;border-radius:10px;overflow:hidden;border:1px solid rgba(255,255,255,0.04)}
+    .info{display:flex;flex-direction:column;gap:8px}
+    .kv{display:flex;justify-content:space-between;padding:8px 10px;border-radius:8px;background:var(--glass);border:1px solid rgba(255,255,255,0.01)}
+    .kv strong{font-weight:700}
+    .small{font-size:0.85rem;color:var(--muted)}
+
+    .footer-note{margin-top:8px;font-size:0.82rem;color:var(--muted)}
+    .actions{display:flex;gap:8px;flex-wrap:wrap}
+    .center{display:flex;align-items:center;gap:8px}
+
+    /* Loading */
+    .loader{width:18px;height:18px;border-radius:50%;border:3px solid rgba(255,255,255,0.08);border-top-color:var(--accent);animation:spin 1s linear infinite}
+    @keyframes spin{to{transform:rotate(360deg)}}
+    a.link{color:var(--accent);text-decoration:none}
+    pre{white-space:pre-wrap;margin:0;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;background:transparent;border-radius:8px;padding:6px}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <div>
+        <h1>Lacak IP — Siap Pakai</h1>
+        <div class="sub">Tampilkan IP pengunjung dan lokasi perkiraan. Peta interaktif (Leaflet + OSM).</div>
+      </div>
+      <div class="center">
+        <div class="small">Simpan halaman sebagai <code>lacak-ip.html</code> lalu buka di browser</div>
+      </div>
+    </header>
+
+    <div class="grid">
+      <!-- MAP AREA -->
+      <div class="card">
+        <div id="map" aria-label="Peta lokasi"></div>
+        <div class="footer-note">Peta: OpenStreetMap via Leaflet — lokasi berdasarkan IP (perkiraan). Jika pengguna izinkan, akan menampilkan lokasi perangkat (lebih akurat).</div>
+      </div>
+
+      <!-- SIDEBAR -->
+      <aside class="card info">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <div>
+            <div class="small">IP Saat Ini</div>
+            <div style="font-size:1.05rem;font-weight:700" id="ip-now">...</div>
+            <div class="muted" id="ip-isp">—</div>
+          </div>
+          <div class="center" id="fetch-status">
+            <div class="loader" id="loader" title="loading" style="display:none"></div>
+          </div>
+        </div>
+
+        <div class="small">Lacak IP lain</div>
+        <div class="controls">
+          <input id="ip-input" type="text" placeholder="Contoh: 8.8.8.8 atau kosong untuk IP saya" />
+          <button id="btn-lookup">Cari</button>
+          <button id="btn-me" class="ghost">Reset ke IP Saya</button>
+        </div>
+
+        <div id="details">
+          <div class="kv"><div class="small">Negara / Kode</div><div id="country">—</div></div>
+          <div class="kv"><div class="small">Region / Kota</div><div id="region">—</div></div>
+          <div class="kv"><div class="small">Lokasi (lat, lon)</div><div id="coords">—</div></div>
+          <div class="kv"><div class="small">Zona Waktu</div><div id="tz">—</div></div>
+          <div class="kv"><div class="small">Kode Pos</div><div id="postal">—</div></div>
+          <div class="kv"><div class="small">ISP / Org</div><div id="org">—</div></div>
+        </div>
+
+        <div style="display:flex;gap:8px;margin-top:10px">
+          <button id="btn-copy" class="ghost">Salin Koordinat</button>
+          <button id="btn-open-osm" class="ghost">Buka OSM</button>
+        </div>
+
+        <div style="margin-top:12px">
+          <div class="small">Opsi tambahan:</div>
+          <div style="display:flex;gap:8px;margin-top:8px">
+            <button id="btn-geoloc" class="ghost">Minta Izin Geolocation</button>
+          </div>
+          <div class="footer-note">Catatan: penggunaan geolocation meminta izin dari pengguna (browser). Data IP hanya perkiraan.</div>
+        </div>
+
+        <div style="margin-top:8px">
+          <div class="small">Pengembang / Catatan</div>
+          <pre id="raw-json">—</pre>
+        </div>
+      </aside>
+    </div>
+  </div>
+
+  <!-- Leaflet JS -->
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+    integrity="sha256-o9N1j8k7bP1s0wqk5gqz8zq3rY5y9j7yqG4Zb0Qn9Y8=" crossorigin=""></script>
+
+  <script>
+    // ---------- Utilities ----------
+    const el = id => document.getElementById(id);
+    const showLoader = on => { el('loader').style.display = on ? 'inline-block' : 'none'; };
+    const setText = (id, v) => el(id).textContent = v ?? '—';
+
+    // ---------- Map ----------
+    const map = L.map('map', { zoomControl: true }).setView([0,0], 2);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19,
+      attribution: '&copy; OpenStreetMap contributors'
+    }).addTo(map);
+    let marker = null;
+    let accuracyCircle = null;
+    function setMap(lat, lon, label) {
+      if (!isFinite(lat) || !isFinite(lon)) return;
+      const latf = parseFloat(lat), lonf = parseFloat(lon);
+      map.setView([latf, lonf], 10, { animate: true });
+      if (marker) marker.setLatLng([latf, lonf]).bindPopup(label ?? '').openPopup();
+      else marker = L.marker([latf, lonf]).addTo(map).bindPopup(label ?? '').openPopup();
+    }
+    function setAccuracyCircle(lat, lon, meters=0) {
+      if (accuracyCircle) accuracyCircle.remove();
+      if (meters && meters > 0) {
+        accuracyCircle = L.circle([lat, lon], { radius: meters, color: '#06b6d4', fillColor: '#06b6d4', fillOpacity: 0.12 }).addTo(map);
+      }
+    }
+
+    // ---------- Fetch IP Data (ipapi.co) ----------
+    // NOTE: ipapi.co has free tier limits. You can replace BASE_API with your API provider if needed.
+    const BASE_API = 'https://ipapi.co'; // e.g. https://ipapi.co/<ip>/json/ or /json/
+
+    async function fetchIpInfo(ip) {
+      try {
+        showLoader(true);
+        const url = ip ? `${BASE_API}/${encodeURIComponent(ip)}/json/` : `${BASE_API}/json/`;
+        const res = await fetch(url, { cache: 'no-store' });
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        const data = await res.json();
+        showLoader(false);
+        if (data.error) throw new Error(data.reason || JSON.stringify(data));
+        return data;
+      } catch (err) {
+        showLoader(false);
+        console.error('fetchIpInfo error', err);
+        throw err;
+      }
+    }
+
+    function renderInfo(data) {
+      setText('ip-now', data.ip || data.query || '—');
+      setText('ip-isp', (data.org || data.isp || data.company?.name) || '—');
+      setText('country', `${data.country_name || '—'} ${data.country_code ? '('+data.country_code+')' : ''}`);
+      setText('region', `${data.region || data.region_name || '—'} / ${data.city || '—'}`);
+      setText('coords', `${data.latitude ?? data.lat ?? '—'}, ${data.longitude ?? data.lon ?? '—'}`);
+      setText('tz', data.timezone || data.time_zone?.name || '—');
+      setText('postal', data.postal || data.postal_code || data.zip || '—');
+      setText('org', data.org || data.isp || '—');
+      el('raw-json').textContent = JSON.stringify(data, null, 2);
+      // map
+      const lat = data.latitude ?? data.lat;
+      const lon = data.longitude ?? data.lon;
+      if (lat && lon) {
+        setMap(lat, lon, `IP: ${data.ip || ''} — ${data.city || ''}`);
+      } else {
+        // if no lat/lon, center world
+        map.setView([0,0], 2);
+      }
+    }
+
+    // ---------- Initial load: get visitor IP ----------
+    async function loadMyIp() {
+      try {
+        const d = await fetchIpInfo();
+        renderInfo(d);
+      } catch (e) {
+        alert('Gagal mengambil data IP: ' + (e.message || e));
+      }
+    }
+
+    // ---------- Controls ----------
+    el('btn-lookup').addEventListener('click', async () => {
+      const ip = el('ip-input').value.trim();
+      if (!ip) {
+        // treat empty as reset to my IP
+        return loadMyIp();
+      }
+      try {
+        const d = await fetchIpInfo(ip);
+        renderInfo(d);
+      } catch (e) {
+        alert('Lookup IP gagal: ' + (e.message || e));
+      }
+    });
+
+    el('btn-me').addEventListener('click', () => {
+      el('ip-input').value = '';
+      loadMyIp();
+    });
+
+    el('btn-copy').addEventListener('click', () => {
+      const coords = el('coords').textContent;
+      if (!coords || coords === '—') return alert('Tidak ada koordinat untuk disalin.');
+      navigator.clipboard?.writeText(coords).then(() => {
+        alert('Koordinat disalin: ' + coords);
+      }, () => {
+        prompt('Salin koordinat:', coords);
+      });
+    });
+
+    el('btn-open-osm').addEventListener('click', () => {
+      const coords = el('coords').textContent;
+      if (!coords || coords === '—') return alert('Tidak ada koordinat untuk dibuka.');
+      const [lat, lon] = coords.split(',').map(s => s.trim());
+      if (!lat || !lon) return alert('Format koordinat tidak valid.');
+      const url = `https://www.openstreetmap.org/?mlat=${encodeURIComponent(lat)}&mlon=${encodeURIComponent(lon)}#map=12/${encodeURIComponent(lat)}/${encodeURIComponent(lon)}`;
+      window.open(url, '_blank');
+    });
+
+    // Request browser geolocation (more accurate, requires user permission)
+    el('btn-geoloc').addEventListener('click', () => {
+      if (!navigator.geolocation) return alert('Geolocation tidak didukung browser ini.');
+      navigator.geolocation.getCurrentPosition(pos => {
+        const c = pos.coords;
+        // show on map and update accuracy circle
+        setMap(c.latitude, c.longitude, `Perangkat (akurat ~${Math.round(c.accuracy||0)}m)`);
+        setAccuracyCircle(c.latitude, c.longitude, c.accuracy || 0);
+        setText('coords', `${c.latitude.toFixed(6)}, ${c.longitude.toFixed(6)}`);
+        setText('region', 'Lokasi perangkat (izin diberikan oleh pengguna)');
+        el('raw-json').textContent = JSON.stringify({ geo: pos.coords, timestamp: pos.timestamp }, null, 2);
+      }, err => {
+        alert('Geolocation error: ' + (err.message || err.code));
+      }, { enableHighAccuracy: true, timeout: 15000 });
+    });
+
+    // ---------- On load ----------
+    (function(){
+      loadMyIp();
+      // optional: auto-ask geolocation? we do not auto-ask to avoid popups without user action
+      // but we center initial map to world view (set above)
+    })();
+  </script>
+</body>
+</html>
